@@ -919,3 +919,25 @@ def test_commit_range_binary_blobs_preserve_exact_endpoint_provenance(tmp_path):
     assert (entries["assets/removed.bin"].old_oid, entries["assets/removed.bin"].new_oid) == (
         oid(repo, "before-binary-change:assets/removed.bin"), None,
     )
+
+
+def test_ref_comparison_merges_index_removal_with_untracked_working_file(tmp_path):
+    """After `git rm --cached`, a file still in the working tree is one
+    comparison against REF, not a deletion plus an addition of the same path."""
+    from diffgraph.git_snapshot import resolve_against_commit
+
+    repo = make_repo(tmp_path)
+    write(repo, "same.py", b"def f():\n    return 1\n")
+    write(repo, "edited.py", b"def g():\n    return 1\n")
+    commit_all(repo)
+    git(repo, "rm", "-q", "--cached", "same.py", "edited.py")
+    write(repo, "edited.py", b"def g():\n    return 2\n")
+
+    result = resolve_against_commit(str(repo), "HEAD")
+
+    assert [(entry.status, entry.old_path, entry.new_path) for entry in result.entries] == [
+        ("M", "edited.py", "edited.py"),
+    ]
+    entry = result.entries[0]
+    assert entry.old_oid == oid(repo, "HEAD:edited.py")
+    assert entry.new_oid == git(repo, "hash-object", "edited.py").decode().strip()

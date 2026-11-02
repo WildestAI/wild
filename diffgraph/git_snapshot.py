@@ -374,10 +374,53 @@ def _resolve(
             entries.append(entry)
 
     if not staged:
-        entries.extend(_resolve_untracked(root, scoped_pathspecs, warnings))
+        untracked = _resolve_untracked(root, scoped_pathspecs, warnings)
+        if base_oid is not None:
+            entries, untracked = _reconcile_untracked_with_base(entries, untracked)
+        entries.extend(untracked)
 
     entries.sort(key=_entry_sort_key)
     return SnapshotResolution(tuple(entries), tuple(warnings))
+
+
+def _reconcile_untracked_with_base(
+    entries: List[SnapshotEntry], untracked: List[SnapshotEntry]
+) -> Tuple[List[SnapshotEntry], List[SnapshotEntry]]:
+    """Merge a base-commit deletion with an untracked file at the same path.
+
+    After ``git rm --cached``, ``git diff REF`` reports the path as deleted
+    (it left the index) while the file is still untracked in the working
+    tree. Against REF that is one file: unchanged, or one modification, never
+    a deletion plus an addition sharing a ``file::<path>`` id.
+    """
+    deletions = {
+        entry.old_path: entry
+        for entry in entries
+        if entry.new_path is None and entry.old_path is not None
+    }
+    merged: List[SnapshotEntry] = []
+    replaced = set()
+    remaining: List[SnapshotEntry] = []
+    for addition in untracked:
+        deletion = deletions.get(addition.new_path)
+        if deletion is None:
+            remaining.append(addition)
+            continue
+        replaced.add(deletion.old_path)
+        if deletion.old_oid == addition.new_oid and deletion.old_mode == addition.new_mode:
+            continue  # identical to the base commit: no change
+        same_type = (deletion.old_mode or "")[:3] == (addition.new_mode or "")[:3]
+        merged.append(SnapshotEntry(
+            status="M" if same_type else "T",
+            old_path=deletion.old_path,
+            new_path=addition.new_path,
+            old_mode=deletion.old_mode,
+            new_mode=addition.new_mode,
+            old_oid=deletion.old_oid,
+            new_oid=addition.new_oid,
+        ))
+    kept = [entry for entry in entries if entry.new_path is not None or entry.old_path not in replaced]
+    return kept + merged, remaining
 
 
 def _resolve_untracked(
