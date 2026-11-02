@@ -488,7 +488,14 @@ def test_viewport_fits_drawn_bounds_and_keeps_the_toolbar_usable():
 
     # Fit to view may scale below the wheel-zoom minimum so tall graphs fit.
     fit_all = script.split("const fitAll = () => {", 1)[1].split("};", 1)[0]
-    assert "clampScale" not in fit_all and "Math.max(0.005" in fit_all
+    fit_width = script.split("const fitWidth = () => {", 1)[1].split("};", 1)[0]
+    assert "clampScale" not in fit_all and "fitScale(" in fit_all
+    # Fit width on a very narrow panel may also go below the wheel minimum.
+    assert "clampScale" not in fit_width and "fitScale(" in fit_width
+    assert "const fitScale = (value) => Math.max(FIT_FLOOR" in script
+    # Zoom-out is bounded by the fitted scale (or the wheel minimum).
+    assert "Math.max(zoomFloor(), Math.min(MAX_SCALE, state.scale * factor))" in script
+    assert "const zoomFloor = () => Math.min(MIN_SCALE, state.fittedScale || MIN_SCALE);" in script
     # Fit width uses the drawn bounds (long labels), and redraws keep the fit.
     assert "const right = Math.max(LAYOUT_WIDTH, box.x + box.width);" in script
     assert "if (state.userMoved) setTransform(); else fitWidth();" in script

@@ -606,7 +606,13 @@ _INTERACTIVE_SCRIPT = textwrap.dedent(
       const LAYOUT_WIDTH = 1400;
       const MIN_SCALE = 0.1;
       const MAX_SCALE = 3;
+      // Fits may go below the wheel minimum (tall or very narrow graphs); that
+      // fitted scale then becomes the zoom-out floor so the graph never
+      // shrinks to nothing, and zooming in from it does not jump.
+      const FIT_FLOOR = 0.005;
       const clampScale = (value) => Math.max(MIN_SCALE, Math.min(MAX_SCALE, value));
+      const fitScale = (value) => Math.max(FIT_FLOOR, Math.min(1.25, value));
+      const zoomFloor = () => Math.min(MIN_SCALE, state.fittedScale || MIN_SCALE);
       const hostSize = () => ({ width: Math.max(1, host.clientWidth), height: Math.max(1, host.clientHeight) });
       // The toolbar wraps on narrow panels; reserve its real height.
       const toolbarSpace = () => toolbar.offsetTop + toolbar.offsetHeight + 8;
@@ -620,7 +626,8 @@ _INTERACTIVE_SCRIPT = textwrap.dedent(
         const { width } = hostSize();
         const box = drawnBox();
         const right = Math.max(LAYOUT_WIDTH, box.x + box.width);
-        state.scale = clampScale(Math.min(1.25, (width - 16) / right));
+        state.scale = fitScale((width - 16) / right);
+        state.fittedScale = state.scale;
         state.x = 8;
         state.y = toolbarSpace();
         setTransform();
@@ -630,8 +637,8 @@ _INTERACTIVE_SCRIPT = textwrap.dedent(
         if (!box.height) { fitWidth(); return; }
         const { width, height } = hostSize();
         const top = toolbarSpace();
-        // Fit may go below the wheel-zoom minimum: a very tall graph still fits.
-        state.scale = Math.max(0.005, Math.min(1.25, (width - 24) / box.width, (height - top - 12) / box.height));
+        state.scale = fitScale(Math.min((width - 24) / box.width, (height - top - 12) / box.height));
+        state.fittedScale = state.scale;
         state.x = (width - box.width * state.scale) / 2 - box.x * state.scale;
         state.y = top - box.y * state.scale;
         state.userMoved = true;
@@ -814,9 +821,7 @@ _INTERACTIVE_SCRIPT = textwrap.dedent(
         const px = event.clientX - rect.left;
         const py = event.clientY - rect.top;
         const factor = event.deltaY < 0 ? 1.12 : 0.89;
-        const next = state.scale < MIN_SCALE
-          ? Math.min(MAX_SCALE, state.scale * factor)
-          : clampScale(state.scale * factor);
+        const next = Math.max(zoomFloor(), Math.min(MAX_SCALE, state.scale * factor));
         state.x = px - (px - state.x) * (next / state.scale);
         state.y = py - (py - state.y) * (next / state.scale);
         state.scale = next;
