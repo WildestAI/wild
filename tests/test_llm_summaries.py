@@ -537,3 +537,15 @@ def test_first_request_client_error_is_fatal(repo, monkeypatch):
 )
 def test_cli_llm_usage_errors(args, repo):
     assert CliRunner().invoke(cli.main, args).exit_code == 2
+
+
+def test_ref_diff_summaries_read_the_working_tree_side(repo):
+    """`wild diff REF --llm`: the new side is the working tree, never an
+    unwritten blob id looked up with git cat-file."""
+    artifact = build_validated_artifact(str(repo), against="HEAD", wild_version="test")
+    assert artifact.value["diff_ref"]["kind"] == "working_tree"
+
+    result = summarize_artifact(artifact, FakeClient(), "claude:fast")
+
+    assert result.warnings == []
+    assert {"file::app.py", "file::NOTES.md", "sym::app.py::value"} <= set(result.summaries)
