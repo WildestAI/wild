@@ -41,24 +41,24 @@
         },
         "base_ref": {
           "type": ["string", "null"],
-          "description": "Resolved comparison-base commit object ID; for three_dot ranges this is the resolved merge base. null for working-tree diffs."
+          "description": "Resolved comparison-base commit object ID: the base commit for commit_range (the merge base for three_dot), working_tree, and `--staged REF`. \"HEAD\" for a plain staged diff; null for unstaged."
         },
         "head_ref": {
           "type": ["string", "null"],
-          "description": "Immutable commit object ID for the head side. null for working-tree diffs."
+          "description": "Immutable commit object ID for the head side of a commit_range. null when the head side is the index or working tree."
         },
         "requested_base_ref": {
           "type": ["string", "null"],
-          "description": "User-supplied base ref before immutable resolution. null for working-tree diffs."
+          "description": "User-supplied base ref before immutable resolution, for commit_range, working_tree, and `--staged REF`. null otherwise."
         },
         "requested_head_ref": {
           "type": ["string", "null"],
-          "description": "User-supplied head ref before immutable resolution. null for working-tree diffs."
+          "description": "User-supplied head ref before immutable resolution, for commit_range only. null otherwise."
         },
         "comparison_mode": {
           "type": ["string", "null"],
           "enum": ["two_dot", "three_dot", null],
-          "description": "Commit-range semantics. three_dot uses the resolved merge-base in base_ref. null for working-tree diffs."
+          "description": "Commit-range semantics. three_dot uses the resolved merge-base in base_ref. null for every other kind."
         },
         "pathspecs": {
           "type": "array",

@@ -8,8 +8,10 @@ Wraps `git` and adds `wild diff`, which parses the changed Python code with
 tree-sitter and builds a graph of changed modules, files, and symbols with
 their calls, imports, and inheritance, including callers outside the diff.
 It prints a ranked review path in the terminal, writes an interactive offline
-HTML report, or emits a schema-validated JSON artifact. No network access
-unless you opt in to AI summaries with `--llm`.
+HTML report, or emits a schema-validated JSON artifact. The terminal, HTML,
+and JSON formats make no network access unless you opt in to AI summaries
+with `--llm`. The deprecated `--format legacy-html` is the exception: it
+calls OpenAI and loads assets from external CDNs.
 
 ## Quick start
 

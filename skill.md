@@ -18,8 +18,10 @@ review path to stdout. Canonical HTML and JSON reports are available explicitly:
 git clone https://github.com/WildestAI/wild && cd wild && pip install -e .
 ```
 
-No API key is needed: analysis is local and offline. AI summaries are opt-in
-(`--llm`, see below).
+No API key is needed: the terminal, HTML, and JSON formats are local and
+offline. AI summaries are opt-in (`--llm`, see below). The deprecated
+`--format legacy-html` is the exception: it sends code to OpenAI and loads
+external CDN assets, so avoid it for private code.
 
 ## Commands
 
