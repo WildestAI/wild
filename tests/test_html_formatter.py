@@ -481,3 +481,25 @@ def test_graph_viewport_fits_and_zooms_at_the_cursor():
     # The viewBox follows the host's pixel size and refits until the user moves.
     assert "svg.setAttribute('viewBox', `0 0 ${width} ${height}`)" in script
     assert "if (!state.userMoved) fitWidth();" in script
+
+
+def test_viewport_fits_drawn_bounds_and_keeps_the_toolbar_usable():
+    from diffgraph.formatters.html import _INTERACTIVE_SCRIPT as script, HtmlFormatter
+
+    # Fit to view may scale below the wheel-zoom minimum so tall graphs fit.
+    fit_all = script.split("const fitAll = () => {", 1)[1].split("};", 1)[0]
+    assert "clampScale" not in fit_all and "Math.max(0.005" in fit_all
+    # Fit width uses the drawn bounds (long labels), and redraws keep the fit.
+    assert "const right = Math.max(LAYOUT_WIDTH, box.x + box.width);" in script
+    assert "if (state.userMoved) setTransform(); else fitWidth();" in script
+    # The toolbar wraps and the graph reserves its real height.
+    assert "toolbar.offsetTop + toolbar.offsetHeight" in script
+    css = HtmlFormatter(ValidatedArtifact.from_value(golden_artifact())).render()
+    assert "flex-wrap: wrap" in css.split(".graph-toolbar {", 1)[1].split("}", 1)[0]
+
+
+def test_long_graph_labels_are_shortened_keeping_the_file_name():
+    from diffgraph.formatters.html import _INTERACTIVE_SCRIPT as script
+
+    assert "truncatePath(file.path || file.id" in script
+    assert "truncate(`${symbol.kind || 'symbol'}: ${symbol.qualified_name || symbol.name || symbol.id}`, 78)" in script
