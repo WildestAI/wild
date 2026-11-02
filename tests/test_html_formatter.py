@@ -489,7 +489,9 @@ def test_viewport_fits_drawn_bounds_and_keeps_the_toolbar_usable():
     # Fit to view may scale below the wheel-zoom minimum so tall graphs fit.
     fit_all = script.split("const fitAll = () => {", 1)[1].split("};", 1)[0]
     fit_width = script.split("const fitWidth = () => {", 1)[1].split("};", 1)[0]
-    assert "clampScale" not in fit_all and "fitScale(" in fit_all
+    whole = script.split("const wholeGraphScale = () => {", 1)[1].split("};", 1)[0]
+    assert "state.scale = wholeGraphScale();" in fit_all and "clampScale" not in fit_all
+    assert "fitScale(" in whole and "clampScale" not in whole
     # Fit width on a very narrow panel may also go below the wheel minimum.
     assert "clampScale" not in fit_width and "fitScale(" in fit_width
     assert "const fitScale = (value) => Math.max(FIT_FLOOR" in script
