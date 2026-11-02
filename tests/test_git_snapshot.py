@@ -784,6 +784,24 @@ def test_incomplete_raw_object_ids_are_not_reported_as_exact_snapshots():
     ]
 
 
+def test_malformed_raw_record_discards_preceding_partial_snapshot():
+    """A malformed raw stream must not be surfaced as a complete snapshot."""
+
+    warnings = []
+    raw = (
+        b":100644 100644 "
+        b"1111111111111111111111111111111111111111 "
+        b"2222222222222222222222222222222222222222 M\0"
+        b"valid.py\0"
+        b":100644 incomplete\0"
+    )
+
+    assert git_snapshot._parse_raw(raw, warnings) == []
+    assert [(warning.code, warning.path) for warning in warnings] == [
+        ("malformed_git_output", None)
+    ]
+
+
 def test_complete_git_object_ids_support_sha1_and_sha256_only():
     assert git_snapshot._is_hex_oid("a" * 40)
     assert git_snapshot._is_hex_oid("b" * 64)

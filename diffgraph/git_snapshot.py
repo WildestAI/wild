@@ -657,9 +657,11 @@ def _parse_raw(data: bytes, warnings: List[ResolutionWarning]) -> List[_RawEntry
             warnings.append(
                 ResolutionWarning("malformed_git_output", str(error), None)
             )
-            # Record boundaries are no longer trustworthy.  Returning the
-            # successfully parsed prefix avoids inventing changes.
-            break
+            # Record boundaries are no longer trustworthy.  A successfully
+            # parsed prefix is not an exact snapshot of the requested Git
+            # state, so omit it rather than presenting a partial change set
+            # as complete.
+            return []
     return parsed
 
 
