@@ -606,13 +606,10 @@ _INTERACTIVE_SCRIPT = textwrap.dedent(
       const LAYOUT_WIDTH = 1400;
       const MIN_SCALE = 0.1;
       const MAX_SCALE = 3;
-      // Fits may go below the wheel minimum (tall or very narrow graphs); that
-      // fitted scale then becomes the zoom-out floor so the graph never
-      // shrinks to nothing, and zooming in from it does not jump.
+      // Fits may go below the wheel minimum (tall or very narrow graphs).
       const FIT_FLOOR = 0.005;
       const clampScale = (value) => Math.max(MIN_SCALE, Math.min(MAX_SCALE, value));
       const fitScale = (value) => Math.max(FIT_FLOOR, Math.min(1.25, value));
-      const zoomFloor = () => Math.min(MIN_SCALE, state.fittedScale || MIN_SCALE);
       const hostSize = () => ({ width: Math.max(1, host.clientWidth), height: Math.max(1, host.clientHeight) });
       // The toolbar wraps on narrow panels; reserve its real height.
       const toolbarSpace = () => toolbar.offsetTop + toolbar.offsetHeight + 8;
@@ -627,18 +624,27 @@ _INTERACTIVE_SCRIPT = textwrap.dedent(
         const box = drawnBox();
         const right = Math.max(LAYOUT_WIDTH, box.x + box.width);
         state.scale = fitScale((width - 16) / right);
-        state.fittedScale = state.scale;
         state.x = 8;
         state.y = toolbarSpace();
         setTransform();
       };
+      // The scale at which the whole drawn graph fits the panel.
+      const wholeGraphScale = () => {
+        const box = drawnBox();
+        if (!box.height) return MIN_SCALE;
+        const { width, height } = hostSize();
+        return fitScale(Math.min((width - 24) / box.width, (height - toolbarSpace() - 12) / box.height));
+      };
+      // Zoom out until the whole graph is visible (or to the wheel minimum,
+      // whichever is smaller), never further: the graph cannot vanish, and a
+      // narrow width fit can still zoom out to show everything.
+      const zoomFloor = () => Math.min(MIN_SCALE, wholeGraphScale());
       const fitAll = () => {
         const box = drawnBox();
         if (!box.height) { fitWidth(); return; }
-        const { width, height } = hostSize();
+        const { width } = hostSize();
         const top = toolbarSpace();
-        state.scale = fitScale(Math.min((width - 24) / box.width, (height - top - 12) / box.height));
-        state.fittedScale = state.scale;
+        state.scale = wholeGraphScale();
         state.x = (width - box.width * state.scale) / 2 - box.x * state.scale;
         state.y = top - box.y * state.scale;
         state.userMoved = true;
