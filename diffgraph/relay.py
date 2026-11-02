@@ -115,9 +115,11 @@ def provider_for_model(model: str) -> str:
 def resolve_model(value: str) -> Tuple[str, str]:
     """Return ``(provider, model)`` for ``provider``, ``provider:tier``, or a model id."""
     value = value.strip()
-    name, _, tier = value.lower().partition(":")
+    name, separator, tier = value.lower().partition(":")
     provider = PROVIDER_ALIASES.get(name)
-    if provider is not None and not tier:
+    # Only a bare provider selects the flagship: an explicit but empty tier
+    # (e.g. an unset ``$TIER`` in ``claude:$TIER``) is an error, not Opus.
+    if provider is not None and not separator:
         return provider, DEFAULT_MODELS[provider]
     if provider is not None:
         tiers = MODEL_TIERS[provider]

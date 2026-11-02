@@ -145,6 +145,14 @@ def test_resolve_model_rejects_unknown_tiers():
         resolve_model("gemini:balanced")
 
 
+@pytest.mark.parametrize("value", ["claude:", "gpt:", "gemini:", "anthropic: "])
+def test_resolve_model_rejects_an_explicit_empty_tier(value):
+    # A bare provider is the flagship shorthand; an empty tier must not
+    # silently become the most expensive model.
+    with pytest.raises(ValueError, match="unknown tier ''"):
+        resolve_model(value)
+
+
 def test_provider_for_unknown_model_is_rejected():
     with pytest.raises(ValueError, match="cannot tell which provider"):
         provider_for_model("llama-3")
