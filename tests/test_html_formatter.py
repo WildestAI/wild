@@ -497,9 +497,9 @@ def test_viewport_fits_drawn_bounds_and_keeps_the_toolbar_usable():
     assert "const fitScale = (value) => Math.max(FIT_FLOOR" in script
     # Zoom-out is bounded by the fitted scale (or the wheel minimum).
     assert "Math.max(zoomFloor(), Math.min(MAX_SCALE, state.scale * factor))" in script
-    # The floor is "the whole graph fits" (or the wheel minimum), not the last
-    # fit, so a narrow width fit can still zoom out to show everything.
-    assert "const zoomFloor = () => Math.min(MIN_SCALE, wholeGraphScale());" in script
+    # The floor also respects the current scale so a narrow fitWidth scale
+    # below MIN_SCALE can still be zoomed out from.
+    assert "const zoomFloor = () => Math.min(state.scale, MIN_SCALE, wholeGraphScale());" in script
     assert "fittedScale" not in script
     # Fit width uses the drawn bounds (long labels), and redraws keep the fit.
     assert "const right = Math.max(LAYOUT_WIDTH, box.x + box.width);" in script

@@ -638,7 +638,9 @@ _INTERACTIVE_SCRIPT = textwrap.dedent(
       // Zoom out until the whole graph is visible (or to the wheel minimum,
       // whichever is smaller), never further: the graph cannot vanish, and a
       // narrow width fit can still zoom out to show everything.
-      const zoomFloor = () => Math.min(MIN_SCALE, wholeGraphScale());
+      // The floor also respects the current scale so a narrow fitWidth scale
+      // below MIN_SCALE can still be zoomed out from.
+      const zoomFloor = () => Math.min(state.scale, MIN_SCALE, wholeGraphScale());
       const fitAll = () => {
         const box = drawnBox();
         if (!box.height) { fitWidth(); return; }
