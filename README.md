@@ -106,7 +106,9 @@ combinations are usage errors. Likewise, `--format terminal` cannot use
 `--output`. Terminal-only `--compact` and `--all` flags follow `diff`.
 
 Canonical output supports local unstaged (`index` → working tree), staged
-(`HEAD` → index), explicit two-dot (`BASE..HEAD`), and explicit three-dot
+(`HEAD` → index), one commit against the working tree (`wild diff REF`, like
+`git diff REF`, including untracked files) or the index (`wild diff --staged
+REF`), explicit two-dot (`BASE..HEAD`), and explicit three-dot
 (`BASE...HEAD`) comparisons. Two-dot resolves both refs to immutable commits;
 three-dot resolves their merge base and compares it with the immutable head,
 matching Git diff semantics. For commit ranges, `diff_ref` records both the
@@ -117,7 +119,9 @@ bases produce structured warnings instead of false changes.
 
 Put pathspecs after `--`. Pathspecs are interpreted relative to the directory
 where `wild` is invoked, matching Git's command-line behavior. Both endpoints
-of a commit range are required; implicit-ref forms are rejected.
+of a commit range are required. A single operand that is not a commit
+(e.g. a mistyped ref or a pathspec without `--`) is a usage error, never an
+empty diff.
 
 Python (`.py`) is the only language with structural symbol/import extraction in
 this baseline. Other changed files remain in `files[]` and receive a scoped
@@ -180,9 +184,13 @@ boxes and lists, terminal `AI:` lines). Requests go through
 `claude-*`, `gpt-*`, and `gemini-*` models (or an explicit
 `anthropic/`, `openai/`, `google/` prefix) to that provider.
 
-- **Models:** `--llm claude`, `--llm gpt`, and `--llm gemini` use
-  `claude-opus-5-5`, `gpt-6-astra`, and `gemini-4-argon`; pass any model id
-  (e.g. `--llm gemini-3.8-flash`) to choose another.
+- **Models:** `--llm claude`, `--llm gpt`, and `--llm gemini` use each
+  provider's flagship (`claude-opus-5-5`, `gpt-6-astra`, `gemini-4-argon`).
+  Add a tier for speed or cost: `claude:fast` (`claude-haiku-5-5`),
+  `claude:balanced` (`claude-sonnet-5-5`), `gpt:fast` (`gpt-6-luna`),
+  `gpt:balanced` (`gpt-6.1-sol`), `gemini:fast` (`gemini-3.8-flash`); `:best`
+  is the flagship. Any exact model id also works (e.g. `--llm
+  gemini-3.8-flash`).
 - **Keys:** on first use, `wild` registers with the relay and sends the
   provider key once; the relay stores it encrypted. The key comes from
   `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY`/`GOOGLE_API_KEY`

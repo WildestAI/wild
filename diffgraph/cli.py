@@ -14,7 +14,7 @@ from diffgraph.artifact import (
 )
 from diffgraph.contract import DiffGraphContractError, validate_artifact
 from diffgraph.env_loader import load_env_file, debug_environment
-from diffgraph.git_snapshot import GitSnapshotError
+from diffgraph.git_snapshot import GitSnapshotError, UnknownRevisionError
 from diffgraph.utils import sanitize_diff_args, involves_working_tree
 from diffgraph.structural import StructuralDependencyError
 
@@ -185,6 +185,7 @@ class _StructuralScope:
     base_ref: Optional[str] = None
     head_ref: Optional[str] = None
     three_dot: bool = False
+    against: Optional[str] = None
 
 
 def _range_operand(argument: str):
@@ -220,7 +221,7 @@ def _structural_scope(
         arguments = arguments[:-count]
 
     staged = False
-    base_ref = head_ref = None
+    base_ref = head_ref = against = None
     three_dot = False
     for argument in arguments:
         if argument in ("--staged", "--cached"):
@@ -232,11 +233,15 @@ def _structural_scope(
             continue
         commit_range = _range_operand(argument)
         if commit_range is None:
-            raise click.UsageError(
-                "canonical output supports unstaged, --staged/--cached, or explicit "
-                "BASE..HEAD/BASE...HEAD diffs; put pathspecs after '--'"
-            )
-        if staged or base_ref is not None:
+            # One commit, like ``git diff REF`` (or ``--staged REF``).
+            if argument.startswith("-") or against is not None or base_ref is not None:
+                raise click.UsageError(
+                    "canonical output supports unstaged, --staged/--cached, REF, "
+                    "--staged REF, or BASE..HEAD/BASE...HEAD diffs; put pathspecs after '--'"
+                )
+            against = argument
+            continue
+        if staged or base_ref is not None or against is not None:
             raise click.UsageError("use exactly one local mode or commit range")
         base_ref, head_ref, three_dot = commit_range
 
@@ -246,6 +251,7 @@ def _structural_scope(
         base_ref,
         head_ref,
         three_dot,
+        against,
     )
 
 
@@ -457,9 +463,10 @@ def _enrich_with_llm(artifact, model: str):
     default=None,
     help=(
         'Add AI summaries to each changed file and symbol through BYOK Relay. '
-        'MODEL is a provider (claude, gpt, gemini: its latest flagship) or an '
-        'exact model id (e.g. gemini-3.8-flash). Sends the changed code to '
-        'the model provider.'
+        'MODEL is a provider (claude, gpt, gemini: its latest flagship), a '
+        'provider tier (e.g. claude:fast for Haiku; tiers: fast, balanced, '
+        'best), or an exact model id (e.g. gemini-3.8-flash). Sends the '
+        'changed code to the model provider.'
     ),
 )
 def main(
@@ -539,8 +546,11 @@ def main(
                     base_ref=scope.base_ref,
                     head_ref=scope.head_ref,
                     three_dot=scope.three_dot,
+                    against=scope.against,
                     wild_version=__version__,
                 )
+            except UnknownRevisionError as error:
+                raise click.UsageError(str(error)) from error
             except (
                 GitSnapshotError,
                 StructuralDependencyError,

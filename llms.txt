@@ -1,20 +1,29 @@
 # DiffGraph-CLI (WildestAI)
 
-> `wild diff` — AI-powered semantic analysis of git diffs.
+> `wild diff` — deterministic, offline semantic graphs of git diffs.
 
 ## What it does
 
-Wraps `git` and adds an AI-powered `wild diff` command that analyses your git diff
-and produces a dependency graph HTML report showing what changed, how components
-relate, and what needs attention.
+Wraps `git` and adds `wild diff`, which parses the changed Python code with
+tree-sitter and builds a graph of changed modules, files, and symbols with
+their calls, imports, and inheritance, including callers outside the diff.
+It prints a ranked review path in the terminal, writes an interactive offline
+HTML report, or emits a schema-validated JSON artifact. The terminal, HTML,
+and JSON formats make no network access unless you opt in to AI summaries
+with `--llm`. The deprecated `--format legacy-html` is the exception: it
+calls OpenAI and loads assets from external CDNs.
 
 ## Quick start
 
 ```bash
-pip install wildest-ai
-export OPENAI_API_KEY=sk-...
-wild diff          # analyse current unstaged changes
-wild diff --staged # analyse staged changes
+pip install -e .              # from a clone of this repository
+wild diff                     # unstaged + untracked changes
+wild diff --staged            # staged changes
+wild diff main                # main -> working tree
+wild diff main...feature      # a branch's changes since it forked
+wild diff -o report.html      # interactive HTML report
+wild diff --format json       # canonical JSON artifact
+wild diff --llm claude:fast   # opt-in AI summaries via BYOK Relay
 ```
 
 All other `wild <cmd>` commands pass through to `git` transparently.

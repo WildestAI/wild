@@ -58,6 +58,10 @@ def _diff_label(diff_ref: dict) -> str:
         head = diff_ref.get("requested_head_ref") or _short_ref(diff_ref.get("head_ref"))
         separator = "..." if diff_ref.get("comparison_mode") == "three_dot" else ".."
         label = f"{base}{separator}{head}"
+    elif kind == "working_tree":
+        label = f"{diff_ref.get('requested_base_ref') or _short_ref(diff_ref.get('base_ref'))} → working tree"
+    elif kind == "staged" and diff_ref.get("requested_base_ref"):
+        label = f"{diff_ref['requested_base_ref']} → index (staged)"
     else:
         label = {"unstaged": "Unstaged changes", "staged": "Staged changes"}.get(kind, str(kind))
     pathspecs = diff_ref.get("pathspecs") or []
@@ -87,7 +91,8 @@ _INTERACTIVE_SCRIPT = textwrap.dedent(
       if (!files.length) return;
 
       const svg = document.createElementNS(NS, 'svg');
-      svg.setAttribute('viewBox', '0 0 1400 840');
+      // The viewBox tracks the host's pixel size, so pan/zoom work in screen
+      // pixels; the layout itself is LAYOUT_WIDTH units wide.
       svg.setAttribute('preserveAspectRatio', 'xMinYMin meet');
       svg.setAttribute('role', 'img');
       svg.setAttribute('aria-label', 'Interactive DiffGraph visualization');
@@ -136,6 +141,15 @@ _INTERACTIVE_SCRIPT = textwrap.dedent(
         return { text: summary.text.trim().replace(/\\s+/g, ' '), model: inference && inference.model ? String(inference.model) : null };
       };
       const truncate = (value, max) => (value.length > max ? value.slice(0, max - 1) + '…' : value);
+      // Keep the end of a long path (the file name matters most), cut at a '/'
+      // where possible. Full paths stay in tooltips and the details panel.
+      const truncatePath = (value, max) => {
+        const text = String(value);
+        if (text.length <= max) return text;
+        const tail = text.slice(text.length - (max - 1));
+        const slash = tail.indexOf('/');
+        return '…' + (slash > 0 && slash < tail.length - 12 ? tail.slice(slash) : tail);
+      };
       const summaryLine = (summary, max) => truncate(`AI · ${summary.text}`, max);
 
       const fileIndex = new Map(files.map((file) => [file.id, file]));
@@ -587,10 +601,63 @@ _INTERACTIVE_SCRIPT = textwrap.dedent(
       }
       host.appendChild(toolbar);
       const setTransform = () => viewport.setAttribute('transform', `translate(${state.x} ${state.y}) scale(${state.scale})`);
+
+      // ---- Viewport: fit width by default, fit everything on request, zoom at the cursor ----
+      const LAYOUT_WIDTH = 1400;
+      const MIN_SCALE = 0.1;
+      const MAX_SCALE = 3;
+      // Fits may go below the wheel minimum (tall or very narrow graphs).
+      const FIT_FLOOR = 0.005;
+      const clampScale = (value) => Math.max(MIN_SCALE, Math.min(MAX_SCALE, value));
+      const fitScale = (value) => Math.max(FIT_FLOOR, Math.min(1.25, value));
+      const hostSize = () => ({ width: Math.max(1, host.clientWidth), height: Math.max(1, host.clientHeight) });
+      // The toolbar wraps on narrow panels; reserve its real height.
+      const toolbarSpace = () => toolbar.offsetTop + toolbar.offsetHeight + 8;
+      const syncViewBox = () => { const { width, height } = hostSize(); svg.setAttribute('viewBox', `0 0 ${width} ${height}`); };
+      // Drawn bounds, so long paths or names wider than the nominal layout fit too.
+      const drawnBox = () => {
+        try { const box = viewport.getBBox(); if (box.width && box.height) return box; } catch (_) { /* not rendered yet */ }
+        return { x: 0, y: 0, width: LAYOUT_WIDTH, height: 0 };
+      };
+      const fitWidth = () => {
+        const { width } = hostSize();
+        const box = drawnBox();
+        const right = Math.max(LAYOUT_WIDTH, box.x + box.width);
+        state.scale = fitScale((width - 16) / right);
+        state.x = 8;
+        state.y = toolbarSpace();
+        setTransform();
+      };
+      // The scale at which the whole drawn graph fits the panel.
+      const wholeGraphScale = () => {
+        const box = drawnBox();
+        if (!box.height) return MIN_SCALE;
+        const { width, height } = hostSize();
+        return fitScale(Math.min((width - 24) / box.width, (height - toolbarSpace() - 12) / box.height));
+      };
+      // Zoom out until the whole graph is visible (or to the wheel minimum,
+      // whichever is smaller), never further: the graph cannot vanish, and a
+      // narrow width fit can still zoom out to show everything.
+      // The floor also respects the current scale so a narrow fitWidth scale
+      // below MIN_SCALE can still be zoomed out from.
+      const zoomFloor = () => Math.min(state.scale, MIN_SCALE, wholeGraphScale());
+      const fitAll = () => {
+        const box = drawnBox();
+        if (!box.height) { fitWidth(); return; }
+        const { width } = hostSize();
+        const top = toolbarSpace();
+        state.scale = wholeGraphScale();
+        state.x = (width - box.width * state.scale) / 2 - box.x * state.scale;
+        state.y = top - box.y * state.scale;
+        state.userMoved = true;
+        setTransform();
+      };
+      tool('Fit to view', fitAll);
+      tool('Fit width', () => { state.userMoved = false; fitWidth(); });
       const draw = () => {
         viewport.replaceChildren();
         const positions = new Map();
-        let y = 60;
+        let y = 8;
         moduleList.forEach((module) => {
           const moduleY = y;
           const group = module.files;
@@ -599,7 +666,7 @@ _INTERACTIVE_SCRIPT = textwrap.dedent(
           const moduleCollapsed = state.collapsedModules.has(module.id);
           const moduleToggle = svgEl('g', { class: 'module-toggle', tabindex: '0', role: 'button', 'aria-expanded': String(!moduleCollapsed), 'aria-label': `${moduleCollapsed ? 'Expand' : 'Collapse'} module ${module.name}` });
           moduleToggle.appendChild(svgEl('rect', { x: 28, y: y + 4, width: 1120, height: 26, rx: 6, class: 'toggle-hit' }));
-          addText(moduleToggle, `${moduleCollapsed ? '▶' : '▼'}  module: ${module.name}`, 34, y + 22, 'module-label');
+          addText(moduleToggle, `${moduleCollapsed ? '▶' : '▼'}  module: ${truncatePath(module.name, 120)}`, 34, y + 22, 'module-label');
           if (moduleCollapsed) {
             const changedCount = symbols.filter((symbol) => moduleIdOf.get(symbol.file_id) === module.id && changedSymbolIds.has(symbol.id)).length;
             const outside = group.filter((file) => file.change_kind === 'unchanged').length;
@@ -639,7 +706,7 @@ _INTERACTIVE_SCRIPT = textwrap.dedent(
             const groupNode = svgEl('g', { class: 'file-container', tabindex: '0', role: 'button', 'aria-label': `Details for ${file.path || file.id}` });
             const context = contextFileIds.has(file.id);
             groupNode.appendChild(svgEl('rect', { x: 48, y, width: 1080, height, rx: 10, class: `file-box ${changeClass(file.change_kind)}${context ? ' context' : ''}${isSelected(file.id) ? ' selected' : ''}` }));
-            addText(groupNode, file.path || file.id, 88, y + 29, 'file-label');
+            addText(groupNode, truncatePath(file.path || file.id, file.id === startFileId ? 84 : 96), 88, y + 29, 'file-label');
             if (file.id === startFileId) addText(groupNode, '◆ start here', 880, y + 29, 'start-label');
             addText(groupNode, context ? 'outside diff' : file.change_kind || 'unknown', context ? 1000 : 1014, y + 29, 'change-label');
             if (fileSummary) addText(groupNode, summaryLine(fileSummary, 150), 88, y + 52, 'summary-label');
@@ -660,7 +727,7 @@ _INTERACTIVE_SCRIPT = textwrap.dedent(
               const boxHeight = summary ? 44 : 28;
               const node = svgEl('g', { class: 'symbol-node', tabindex: '0', role: 'button', 'aria-label': `Details for ${symbol.kind || 'symbol'} ${symbol.qualified_name || symbol.name || symbol.id}` });
               node.appendChild(svgEl('rect', { x: 80, y: sy, width: 620, height: boxHeight, rx: 7, class: `symbol-box ${changeClass(symbol.change_kind)}${isSelected(symbol.id) ? ' selected' : ''}` }));
-              addText(node, `${symbol.kind || 'symbol'}: ${symbol.qualified_name || symbol.name || symbol.id}`, 94, sy + 19, 'symbol-label');
+              addText(node, truncate(`${symbol.kind || 'symbol'}: ${symbol.qualified_name || symbol.name || symbol.id}`, 78), 94, sy + 19, 'symbol-label');
               if (summary) addText(node, summaryLine(summary, 84), 94, sy + 36, 'summary-label');
               node.appendChild(svgEl('circle', { cx: 678, cy: sy + 14, r: 5, class: `change-dot ${changeClass(symbol.change_kind)}` }));
               interactive(node, symbol, () => select(symbol.id));
@@ -751,13 +818,35 @@ _INTERACTIVE_SCRIPT = textwrap.dedent(
         defs.appendChild(marker);
         edges.insertBefore(defs, edges.firstChild);
         viewport.appendChild(edges);
-        setTransform();
+        // Expanding or collapsing changes the drawn bounds; keep the fit until
+        // the reader zooms or pans.
+        if (state.userMoved) setTransform(); else fitWidth();
       };
-      svg.addEventListener('wheel', (event) => { event.preventDefault(); const factor = event.deltaY < 0 ? 1.12 : 0.89; state.scale = Math.max(0.35, Math.min(3, state.scale * factor)); setTransform(); }, { passive: false });
+      svg.addEventListener('wheel', (event) => {
+        event.preventDefault();
+        // Keep the layout point under the cursor fixed while zooming.
+        const rect = svg.getBoundingClientRect();
+        const px = event.clientX - rect.left;
+        const py = event.clientY - rect.top;
+        const factor = event.deltaY < 0 ? 1.12 : 0.89;
+        const next = Math.max(zoomFloor(), Math.min(MAX_SCALE, state.scale * factor));
+        state.x = px - (px - state.x) * (next / state.scale);
+        state.y = py - (py - state.y) * (next / state.scale);
+        state.scale = next;
+        state.userMoved = true;
+        setTransform();
+      }, { passive: false });
       svg.addEventListener('pointerdown', (event) => { if (event.target === svg) { state.dragging = true; state.startX = event.clientX - state.x; state.startY = event.clientY - state.y; svg.setPointerCapture(event.pointerId); } });
-      svg.addEventListener('pointermove', (event) => { if (state.dragging) { state.x = event.clientX - state.startX; state.y = event.clientY - state.startY; setTransform(); } });
+      svg.addEventListener('pointermove', (event) => { if (state.dragging) { state.x = event.clientX - state.startX; state.y = event.clientY - state.startY; state.userMoved = true; setTransform(); } });
       svg.addEventListener('pointerup', () => { state.dragging = false; });
+      syncViewBox();
+      fitWidth();
       draw();
+      // Resizing (window, details panel, side-by-side diff) keeps the fit
+      // until the reader zooms or pans themselves.
+      if (typeof ResizeObserver === 'function') {
+        new ResizeObserver(() => { syncViewBox(); if (!state.userMoved) fitWidth(); }).observe(host);
+      }
     })();
     """
 ).strip()
@@ -924,7 +1013,8 @@ class HtmlFormatter:
     .more-label {{ font-size: 13px; fill: var(--text-muted); }}
     .more-toggle:hover .more-label, .more-toggle:focus .more-label {{ fill: var(--text-strong); }}
     .more-toggle:focus > rect {{ stroke: var(--focus); stroke-dasharray: none; }}
-    .graph-toolbar {{ position: absolute; top: .55rem; left: .6rem; z-index: 2; display: flex; gap: .35rem; }}
+    .graph-toolbar {{ position: absolute; top: .55rem; left: .6rem; right: .6rem; z-index: 2; display: flex; flex-wrap: wrap; gap: .35rem; pointer-events: none; }}
+    .graph-toolbar .tool {{ pointer-events: auto; }}
     .tool {{ padding: .2rem .6rem; border: 1px solid var(--outline); border-radius: .35rem; background: var(--node-bg); color: var(--text); font: inherit; font-size: .78rem; cursor: pointer; }}
     .tool[aria-pressed="true"] {{ border-color: var(--selected); color: var(--selected); }}
     .module-toggle {{ cursor: pointer; outline: none; }}

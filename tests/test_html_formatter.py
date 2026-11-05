@@ -469,3 +469,49 @@ def test_details_link_reveals_symbol_inside_a_collapsed_module():
 
     reveal = script.split("const reveal = (id) => {", 1)[1].split("};", 1)[0]
     assert "state.collapsedModules.delete(moduleIdOf.get(fileId));" in reveal
+
+
+def test_graph_viewport_fits_and_zooms_at_the_cursor():
+    from diffgraph.formatters.html import _INTERACTIVE_SCRIPT as script
+
+    assert "tool('Fit to view', fitAll);" in script
+    assert "tool('Fit width'" in script
+    # Wheel zoom keeps the point under the cursor fixed.
+    assert "state.x = px - (px - state.x) * (next / state.scale);" in script
+    # The viewBox follows the host's pixel size and refits until the user moves.
+    assert "svg.setAttribute('viewBox', `0 0 ${width} ${height}`)" in script
+    assert "if (!state.userMoved) fitWidth();" in script
+
+
+def test_viewport_fits_drawn_bounds_and_keeps_the_toolbar_usable():
+    from diffgraph.formatters.html import _INTERACTIVE_SCRIPT as script, HtmlFormatter
+
+    # Fit to view may scale below the wheel-zoom minimum so tall graphs fit.
+    fit_all = script.split("const fitAll = () => {", 1)[1].split("};", 1)[0]
+    fit_width = script.split("const fitWidth = () => {", 1)[1].split("};", 1)[0]
+    whole = script.split("const wholeGraphScale = () => {", 1)[1].split("};", 1)[0]
+    assert "state.scale = wholeGraphScale();" in fit_all and "clampScale" not in fit_all
+    assert "fitScale(" in whole and "clampScale" not in whole
+    # Fit width on a very narrow panel may also go below the wheel minimum.
+    assert "clampScale" not in fit_width and "fitScale(" in fit_width
+    assert "const fitScale = (value) => Math.max(FIT_FLOOR" in script
+    # Zoom-out is bounded by the fitted scale (or the wheel minimum).
+    assert "Math.max(zoomFloor(), Math.min(MAX_SCALE, state.scale * factor))" in script
+    # The floor also respects the current scale so a narrow fitWidth scale
+    # below MIN_SCALE can still be zoomed out from.
+    assert "const zoomFloor = () => Math.min(state.scale, MIN_SCALE, wholeGraphScale());" in script
+    assert "fittedScale" not in script
+    # Fit width uses the drawn bounds (long labels), and redraws keep the fit.
+    assert "const right = Math.max(LAYOUT_WIDTH, box.x + box.width);" in script
+    assert "if (state.userMoved) setTransform(); else fitWidth();" in script
+    # The toolbar wraps and the graph reserves its real height.
+    assert "toolbar.offsetTop + toolbar.offsetHeight" in script
+    css = HtmlFormatter(ValidatedArtifact.from_value(golden_artifact())).render()
+    assert "flex-wrap: wrap" in css.split(".graph-toolbar {", 1)[1].split("}", 1)[0]
+
+
+def test_long_graph_labels_are_shortened_keeping_the_file_name():
+    from diffgraph.formatters.html import _INTERACTIVE_SCRIPT as script
+
+    assert "truncatePath(file.path || file.id" in script
+    assert "truncate(`${symbol.kind || 'symbol'}: ${symbol.qualified_name || symbol.name || symbol.id}`, 78)" in script

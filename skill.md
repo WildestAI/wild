@@ -1,6 +1,6 @@
 # skill: wild-diff
 
-Use this skill to analyse git diffs with WildestAI's `wild` CLI and get semantic understanding of code changes.
+Use this skill to analyse git diffs with WildestAI's `wild` CLI and get a structural understanding of code changes.
 
 ## What it does
 
@@ -14,14 +14,14 @@ review path to stdout. Canonical HTML and JSON reports are available explicitly:
 ## Prerequisites
 
 ```bash
-# Install
-pip install wildest-ai
-# or from source:
+# Install from source (Python 3.10+)
 git clone https://github.com/WildestAI/wild && cd wild && pip install -e .
-
-# Set your OpenAI API key
-export OPENAI_API_KEY=sk-...
 ```
+
+No API key is needed: the terminal, HTML, and JSON formats are local and
+offline. AI summaries are opt-in (`--llm`, see below). The deprecated
+`--format legacy-html` is the exception: it sends code to OpenAI and loads
+external CDN assets, so avoid it for private code.
 
 ## Commands
 
@@ -32,19 +32,25 @@ wild diff
 # Analyse only staged changes
 wild diff --staged
 
-# Diff between HEAD and a specific commit
-wild diff <commit-hash>
+# Compare a commit (or branch) with the working tree, like `git diff REF`
+wild diff HEAD
+wild diff main
 
-# Diff between two commits
-wild diff <commit1> <commit2>
+# Compare two commits, or a branch since it forked from main
+wild diff HEAD~3..HEAD
+wild diff main...feature
 
-# Diff for a specific file
-wild diff path/to/file.py
+# Limit to paths: put them after `--`
+wild diff main -- path/to/file.py
 
-# Generate an interactive HTML report, don't auto-open
-wild diff --format html --output report.html --no-open
-# `-o` alone also selects HTML
+# Machine-readable artifact (schema 2.1) for agents and CI
+wild diff --format json main...feature
+
+# Interactive offline HTML report, don't auto-open (`-o` alone selects HTML)
 wild diff -o report.html --no-open
+
+# Opt-in one-sentence AI summaries per changed file and symbol
+wild diff --llm claude:fast        # Haiku; also claude, gpt, gemini, gpt:fast, gemini:fast
 
 # All other git commands pass through transparently
 wild log
@@ -76,14 +82,15 @@ The MCP server exposes tools:
 
 ## Configuration
 
-Environment variables:
-- `OPENAI_API_KEY` — required for AI analysis
-- Copy `.env.example` to `.env` to set locally
+AI summaries (`--llm`) go through BYOK Relay. Provider keys come from the
+shell environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`)
+or a hidden prompt; they are never read from a repository's `.env`.
+`BYOK_RELAY_TOKEN` / `BYOK_RELAY_URL` (shell only) select an existing relay
+token or a self-hosted relay.
 
 ## Notes
 
-- Works with Python 3.7+
-- Tested on macOS and Linux
+- Requires Python 3.10+; tested on macOS and Linux
+- Structural analysis covers Python; other files are listed with their diffs
 - The CLI wraps `git` — it must be run inside a git repository
-- Large diffs may be slow; consider scoping with file paths or commit ranges
-- The `.env` file is git-ignored — never commit API keys
+- Exit codes: 0 success (including no changes), 1 runtime failure, 2 usage error

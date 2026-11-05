@@ -482,7 +482,12 @@ class TerminalFormatter:
             "unstaged": "unstaged changes",
             "staged": "staged changes",
         }
-        if diff_kind in diff_context_map:
+        requested_base = diff_ref.get("requested_base_ref")
+        if diff_kind == "working_tree":
+            diff_context = f"{requested_base or diff_ref.get('base_ref', '')} → working tree"
+        elif diff_kind == "staged" and requested_base:
+            diff_context = f"{requested_base} → index (staged)"
+        elif diff_kind in diff_context_map:
             diff_context = diff_context_map[diff_kind]
         elif diff_kind == "commit_range":
             base = diff_ref.get("base_ref", "")

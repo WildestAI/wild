@@ -28,6 +28,7 @@ from diffgraph.git_snapshot import (
     SnapshotEntry,
     read_worktree_blob,
     repository_root,
+    resolve_against_commit,
     resolve_commit_range,
     resolve_staged,
     resolve_unstaged,
@@ -1355,9 +1356,14 @@ def analyze_local_diff(
     base_ref: Optional[str] = None,
     head_ref: Optional[str] = None,
     three_dot: bool = False,
+    against: Optional[str] = None,
     wild_version: str = package_version,
 ) -> Dict:
-    """Build a schema-v2 artifact for a local snapshot or immutable commit range."""
+    """Build a schema-v2 artifact for a local snapshot or immutable commit range.
+
+    ``against`` compares one commit with the working tree (``git diff REF``)
+    or, with ``staged``, with the index (``git diff --cached REF``).
+    """
     started = time.monotonic()
     root = repository_root(repository)
     if (base_ref is None) != (head_ref is None):
@@ -1365,8 +1371,12 @@ def analyze_local_diff(
     is_commit_range = base_ref is not None
     if is_commit_range and staged:
         raise ValueError("staged and commit-range comparisons are mutually exclusive")
+    if is_commit_range and against is not None:
+        raise ValueError("a commit range and a single base ref are mutually exclusive")
     resolution = (
-        resolve_commit_range(
+        resolve_against_commit(repository, against, staged=staged, pathspecs=pathspecs)
+        if against is not None
+        else resolve_commit_range(
             repository,
             base_ref,
             head_ref,
@@ -1814,12 +1824,21 @@ def analyze_local_diff(
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "wild_version": wild_version,
         "diff_ref": {
-            "kind": "commit_range" if is_commit_range else "staged" if staged else "unstaged",
+            "kind": (
+                "commit_range" if is_commit_range
+                else "staged" if staged
+                else "working_tree" if against is not None
+                else "unstaged"
+            ),
             "base_ref": (
-                resolution.comparison_base_oid if is_commit_range else "HEAD" if staged else None
+                resolution.comparison_base_oid if is_commit_range
+                else resolution.base_oid if against is not None
+                else "HEAD" if staged else None
             ),
             "head_ref": resolution.head_oid if is_commit_range else None,
-            "requested_base_ref": resolution.base_ref if is_commit_range else None,
+            "requested_base_ref": (
+                resolution.base_ref if is_commit_range or against is not None else None
+            ),
             "requested_head_ref": resolution.head_ref if is_commit_range else None,
             "comparison_mode": (
                 ("three_dot" if three_dot else "two_dot") if is_commit_range else None

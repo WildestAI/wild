@@ -3,9 +3,12 @@
   "generated_at": "2026-08-12T10:00:00Z",
   "wild_version": "1.1.0",
   "diff_ref": {
-    "kind": "unstaged",
-    "base_ref": null,
+    "kind": "working_tree",
+    "base_ref": "0123456789abcdef0123456789abcdef01234567",
     "head_ref": null,
+    "requested_base_ref": "main",
+    "requested_head_ref": null,
+    "comparison_mode": null,
     "pathspecs": [],
     "repo_root": "/example/repository"
   },

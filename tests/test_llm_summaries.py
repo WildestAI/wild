@@ -129,10 +129,28 @@ def test_provider_for_model(model, provider):
         ("Claude", ("anthropic", "claude-opus-5-5")),
         ("openai", ("openai", "gpt-6-astra")),
         ("gemini-3.8-flash", ("google", "gemini-3.8-flash")),
+        ("claude:fast", ("anthropic", "claude-haiku-5-5")),
+        ("Claude:Balanced", ("anthropic", "claude-sonnet-5-5")),
+        ("gpt:fast", ("openai", "gpt-6-luna")),
+        ("gemini:fast", ("google", "gemini-3.8-flash")),
+        ("gemini:best", ("google", "gemini-4-argon")),
     ],
 )
-def test_resolve_model_accepts_provider_defaults_and_exact_ids(value, expected):
+def test_resolve_model_accepts_provider_defaults_tiers_and_exact_ids(value, expected):
     assert resolve_model(value) == expected
+
+
+def test_resolve_model_rejects_unknown_tiers():
+    with pytest.raises(ValueError, match="unknown tier 'balanced' for gemini; use one of: best, fast"):
+        resolve_model("gemini:balanced")
+
+
+@pytest.mark.parametrize("value", ["claude:", "gpt:", "gemini:", "anthropic: "])
+def test_resolve_model_rejects_an_explicit_empty_tier(value):
+    # A bare provider is the flagship shorthand; an empty tier must not
+    # silently become the most expensive model.
+    with pytest.raises(ValueError, match="unknown tier ''"):
+        resolve_model(value)
 
 
 def test_provider_for_unknown_model_is_rejected():
@@ -519,3 +537,15 @@ def test_first_request_client_error_is_fatal(repo, monkeypatch):
 )
 def test_cli_llm_usage_errors(args, repo):
     assert CliRunner().invoke(cli.main, args).exit_code == 2
+
+
+def test_ref_diff_summaries_read_the_working_tree_side(repo):
+    """`wild diff REF --llm`: the new side is the working tree, never an
+    unwritten blob id looked up with git cat-file."""
+    artifact = build_validated_artifact(str(repo), against="HEAD", wild_version="test")
+    assert artifact.value["diff_ref"]["kind"] == "working_tree"
+
+    result = summarize_artifact(artifact, FakeClient(), "claude:fast")
+
+    assert result.warnings == []
+    assert {"file::app.py", "file::NOTES.md", "sym::app.py::value"} <= set(result.summaries)

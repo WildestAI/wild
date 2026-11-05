@@ -113,7 +113,9 @@ def _unified_diff(path: str, old: Optional[str], new: Optional[str]) -> str:
 
 def _jobs(dg: dict) -> Tuple[List[_FileJob], List[Dict[str, str]]]:
     root = dg["diff_ref"].get("repo_root") or "."
-    worktree = dg["diff_ref"].get("kind") == "unstaged"
+    # The post-change side lives in the working tree (re-verified against its
+    # recorded blob id) for unstaged diffs and for ``wild diff REF``.
+    worktree = dg["diff_ref"].get("kind") in ("unstaged", "working_tree")
     symbols_by_file: Dict[str, List[dict]] = {}
     for symbol in dg["symbols"]:
         if symbol["change_kind"] != "unchanged" and symbol["kind"] != "import":

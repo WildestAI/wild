@@ -2532,3 +2532,63 @@ def test_inherits_edges_require_a_confirmed_class_target(tmp_path):
     # The external import is still recorded as an import symbol with evidence.
     stub = next(item for item in artifact["symbols"] if item["id"] == "sym::pkg/inside.py::import::external")
     assert stub["kind"] == "import" and stub["evidence"][0]["snippet"] == "from external import Framework"
+
+
+def _ref_repo(tmp_path):
+    root = repo(tmp_path)
+    write(root, "app.py", "def one():\n    return 1\n")
+    git(root, "add", ".")
+    git(root, "commit", "-m", "base")
+    write(root, "app.py", "def one():\n    return 1\n\ndef two():\n    return 2\n")
+    git(root, "commit", "-am", "second")
+    write(root, "app.py", "def one():\n    return 10\n\ndef two():\n    return 2\n")
+    write(root, "new.py", "def fresh():\n    return 0\n")  # untracked
+    return root
+
+
+def test_single_ref_compares_that_commit_with_the_working_tree(tmp_path):
+    root = _ref_repo(tmp_path)
+
+    artifact = analyze_local_diff(str(root), against="HEAD~1")
+
+    assert_valid(artifact)
+    ref = artifact["diff_ref"]
+    assert ref["kind"] == "working_tree" and ref["requested_base_ref"] == "HEAD~1"
+    assert ref["base_ref"] == git(root, "rev-parse", "HEAD~1").strip()
+    changes = {item["name"]: item["change_kind"] for item in artifact["symbols"] if item["kind"] != "import"}
+    # Committed (two), uncommitted (one), and untracked (fresh) changes all count.
+    assert changes == {"one": "modified", "two": "added", "fresh": "added"}
+
+
+def test_staged_single_ref_compares_that_commit_with_the_index(tmp_path):
+    root = _ref_repo(tmp_path)
+    git(root, "add", "app.py")
+
+    artifact = analyze_local_diff(str(root), staged=True, against="HEAD~1")
+
+    ref = artifact["diff_ref"]
+    assert ref["kind"] == "staged" and ref["requested_base_ref"] == "HEAD~1"
+    names = {item["name"] for item in artifact["symbols"] if item["change_kind"] != "unchanged"}
+    assert names == {"one", "two"}  # untracked new.py is not in the index
+
+
+def test_cli_single_ref_and_unknown_revision(tmp_path, monkeypatch):
+    from click.testing import CliRunner
+    import diffgraph.cli as cli
+
+    root = _ref_repo(tmp_path)
+    monkeypatch.chdir(root)
+
+    ok = CliRunner().invoke(cli.main, ["diff", "--format", "json", "HEAD"])
+    assert ok.exit_code == 0, ok.output
+    assert json.loads(ok.stdout)["diff_ref"]["kind"] == "working_tree"
+
+    terminal = CliRunner().invoke(cli.main, ["diff", "HEAD~1"])
+    assert "HEAD~1 → working tree" in terminal.stdout
+
+    typo = CliRunner().invoke(cli.main, ["diff", "mian"])
+    assert typo.exit_code == 2
+    assert "unknown revision 'mian'; put pathspecs after '--'" in typo.output
+
+    both = CliRunner().invoke(cli.main, ["diff", "HEAD~1..HEAD", "HEAD"])
+    assert both.exit_code == 2

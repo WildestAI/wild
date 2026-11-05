@@ -50,11 +50,15 @@ PROVIDER_ALIASES = {
     "openai": "openai", "gpt": "openai",
     "google": "google", "gemini": "google",
 }
-DEFAULT_MODELS = {
-    "anthropic": "claude-opus-5-5",
-    "openai": "gpt-6-astra",
-    "google": "gemini-4-argon",
+# ``--llm <provider>:<tier>`` picks a speed/cost tier. ``best`` (the bare
+# provider default) is the latest coding/reasoning flagship; ``fast`` is the
+# cheapest, quickest current model. Update as providers release new models.
+MODEL_TIERS = {
+    "anthropic": {"fast": "claude-haiku-5-5", "balanced": "claude-sonnet-5-5", "best": "claude-opus-5-5"},
+    "openai": {"fast": "gpt-6-luna", "balanced": "gpt-6.1-sol", "best": "gpt-6-astra"},
+    "google": {"fast": "gemini-3.8-flash", "best": "gemini-4-argon"},
 }
+DEFAULT_MODELS = {provider: tiers["best"] for provider, tiers in MODEL_TIERS.items()}
 # Environment variables that may hold a provider key for first-time setup.
 PROVIDER_KEY_ENVS = {
     "anthropic": ("ANTHROPIC_API_KEY",),
@@ -109,11 +113,23 @@ def provider_for_model(model: str) -> str:
 
 
 def resolve_model(value: str) -> Tuple[str, str]:
-    """Return ``(provider, model)`` for a provider name or an exact model id."""
+    """Return ``(provider, model)`` for ``provider``, ``provider:tier``, or a model id."""
     value = value.strip()
-    provider = PROVIDER_ALIASES.get(value.lower())
-    if provider is not None:
+    name, separator, tier = value.lower().partition(":")
+    provider = PROVIDER_ALIASES.get(name)
+    # Only a bare provider selects the flagship: an explicit but empty tier
+    # (e.g. an unset ``$TIER`` in ``claude:$TIER``) is an error, not Opus.
+    if provider is not None and not separator:
         return provider, DEFAULT_MODELS[provider]
+    if provider is not None:
+        tiers = MODEL_TIERS[provider]
+        if tier not in tiers:
+            raise ValueError(
+                "unknown tier {!r} for {}; use one of: {}".format(
+                    tier, name, ", ".join(sorted(tiers))
+                )
+            )
+        return provider, tiers[tier]
     return provider_for_model(value), value
 
 

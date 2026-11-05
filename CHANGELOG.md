@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-26
+
 ### Added
+- `wild diff REF` compares a commit with the working tree (like
+  `git diff REF`), and `wild diff --staged REF` with the index. A single
+  operand that is not a commit is a usage error instead of an empty diff.
+- `--llm` tiers: `claude:fast` (Haiku), `claude:balanced`, `gpt:fast`,
+  `gpt:balanced`, `gemini:fast`, and `:best` (the default flagship).
+- HTML graph: "Fit to view" and "Fit width" controls; the wheel zooms
+  around the cursor, and the graph refits as its panel resizes.
 - `inherits` edges for bare-name base classes, only to a confirmed class:
   local, imported from a changed file, or a changed or deleted class
   subclassed outside the diff. External bases keep only their import symbol.
