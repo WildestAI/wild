@@ -533,7 +533,7 @@ def test_first_request_client_error_is_fatal(repo, monkeypatch):
 
 @pytest.mark.parametrize(
     "args",
-    [["status", "--llm", "gpt-5-mini"], ["diff", "--format", "legacy-html", "--llm", "gpt-5-mini"]],
+    [["--llm", "gpt-5-mini", "status"], ["diff", "--format", "legacy-html", "--llm", "gpt-5-mini"]],
 )
 def test_cli_llm_usage_errors(args, repo):
     assert CliRunner().invoke(cli.main, args).exit_code == 2
