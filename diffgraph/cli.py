@@ -122,7 +122,38 @@ class _RawArgsCommand(click.Command):
 
     def parse_args(self, ctx, args):
         ctx.meta["raw_args"] = tuple(args)
-        return super().parse_args(ctx, args)
+        command_index = self._command_index(args)
+        if command_index is None or args[command_index] == "diff":
+            return super().parse_args(ctx, args)
+        # Every other command belongs to git verbatim: `wild log --format=%h`
+        # or `wild format-patch -o dir` must not be parsed as wild's options.
+        remaining = super().parse_args(ctx, list(args[:command_index]))
+        ctx.params["args"] = tuple(args[command_index:])
+        return remaining
+
+    def _command_index(self, args):
+        """Index of the first positional argument after wild's own options."""
+        takes_value = set()
+        known = set()
+        for param in self.params:
+            if isinstance(param, click.Option):
+                names = [*param.opts, *param.secondary_opts]
+                known.update(names)
+                if not param.is_flag and not param.count:
+                    takes_value.update(names)
+        index = 0
+        while index < len(args):
+            argument = args[index]
+            if argument == "--":
+                return None
+            name = argument.split("=", 1)[0]
+            if argument.startswith("-") and name in known:
+                index += 2 if name in takes_value and "=" not in argument else 1
+                continue
+            if argument.startswith("-"):
+                return None  # an unknown option: let click report it
+            return index
+        return None
 
 
 def _terminal_options(

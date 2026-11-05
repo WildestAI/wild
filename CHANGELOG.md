@@ -15,8 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (terminal, HTML, JSON) failed with "could not load canonical DiffGraph
   schema". The build now bundles an explicit allowlist of runtime package
   data (only the schema); `.env` files are still refused.
-- Release smoke tests run a real diff (JSON, HTML, terminal) on every
-  platform instead of `--help`, which could not catch missing runtime data.
+- Non-diff commands pass through to git verbatim again. `wild log
+  --format=…`, `wild show --format=…`, and `wild format-patch -o DIR` failed
+  because wild parsed its own `--format`/`--output` options for every
+  command.
+- Release smoke tests are an end-to-end scenario suite instead of `--help`:
+  the exact commands the VS Code extension runs (health probe, working tree,
+  staged, history, including a parentless first commit), `REF`, `--staged
+  REF`, three-dot, pathspec, binary file, no-change, usage and runtime exit
+  codes, and git passthrough. Every JSON artifact is schema-validated. All
+  five release platforms run it on the native binary, and CI runs it on the
+  installed CLI.
 
 ## [1.3.0] - 2026-10-26
 

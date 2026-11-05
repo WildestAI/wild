@@ -78,6 +78,10 @@ def test_release_build_rejects_checkout_or_ancestor_output_dir_before_cleanup(
 
 def test_native_binary_reports_version(tmp_path: Path) -> None:
     pytest.importorskip("PyInstaller")
+    forbidden = build.find_forbidden_files(build.ROOT)
+    if forbidden:
+        # The builder correctly refuses such a workspace; CI never has one.
+        pytest.skip(f"local credential file(s) present: {', '.join(p.name for p in forbidden)}")
     output_dir = tmp_path / "release"
     subprocess.run(
         [sys.executable, "build.py", "--output-dir", str(output_dir), "--name", "wild"],
@@ -93,12 +97,12 @@ def test_native_binary_reports_version(tmp_path: Path) -> None:
         cwd=build.ROOT, capture_output=True, text=True,
     )
     assert smoke.returncode == 0, smoke.stdout + smoke.stderr
-    assert "json: schema 2." in smoke.stdout
+    assert "scenarios passed" in smoke.stdout
 
 
 
-def test_release_smoke_script_checks_a_real_diff():
-    """The release smoke test passes on a working CLI (the dev install)."""
+def test_release_scenario_suite_passes_on_the_installed_cli():
+    """The release scenario suite (VS Code extension commands, core CLI forms, exit codes, git passthrough) passes on the dev install."""
     import shutil
 
     wild = shutil.which("wild")
@@ -109,4 +113,4 @@ def test_release_smoke_script_checks_a_real_diff():
         cwd=build.ROOT, capture_output=True, text=True,
     )
     assert smoke.returncode == 0, smoke.stdout + smoke.stderr
-    assert "json: schema 2." in smoke.stdout and "html:" in smoke.stdout
+    assert "schema-validated" in smoke.stdout and "scenarios passed" in smoke.stdout
