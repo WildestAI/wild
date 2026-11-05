@@ -64,23 +64,23 @@ jobs:
           - target: linux-x64
             runner: ubuntu-latest
             asset: wild-linux-x64
-            smoke: ./release/wild-linux-x64 --help
+            smoke: python scripts/release_smoke.py ./release/wild-linux-x64
           - target: linux-arm64
             runner: ubuntu-24.04-arm
             asset: wild-linux-arm64
-            smoke: ./release/wild-linux-arm64 --help
+            smoke: python scripts/release_smoke.py ./release/wild-linux-arm64
           - target: macos-x64
             runner: macos-15-intel
             asset: wild-macos-x64
-            smoke: ./release/wild-macos-x64 --help
+            smoke: python scripts/release_smoke.py ./release/wild-macos-x64
           - target: macos-arm64
             runner: macos-15
             asset: wild-macos-arm64
-            smoke: ./release/wild-macos-arm64 --help
+            smoke: python scripts/release_smoke.py ./release/wild-macos-arm64
           - target: windows-x64
             runner: windows-latest
             asset: wild-win.exe
-            smoke: ./release/wild-win.exe --help
+            smoke: python scripts/release_smoke.py ./release/wild-win.exe
 
     runs-on: ${{ matrix.runner }}
     steps:
@@ -106,6 +106,8 @@ jobs:
           else
             mv release/wild "release/${{ matrix.asset }}"
           fi
+      # A real diff (JSON, HTML, terminal), not just --help: --help cannot
+      # catch missing runtime data such as the DiffGraph schema.
       - name: Smoke test native executable
         shell: bash
         run: ${{ matrix.smoke }}

@@ -9,7 +9,7 @@ import build
 from diffgraph import __version__
 
 
-def test_release_build_command_does_not_add_data_files(tmp_path):
+def test_release_build_bundles_only_the_allowlisted_schema(tmp_path):
     command = build.build_command(
         output_dir=tmp_path / "release",
         work_dir=tmp_path / "work",
@@ -18,9 +18,28 @@ def test_release_build_command_does_not_add_data_files(tmp_path):
     )
 
     assert "--onefile" in command
-    assert "--add-data" not in command
     assert "--add-binary" not in command
     assert all(".env" not in argument for argument in command)
+    data = [command[index + 1] for index, argument in enumerate(command) if argument == "--add-data"]
+    # Exactly the runtime schema, as one file into its package directory.
+    assert data == [
+        f"{build.ROOT / 'diffgraph' / 'schema' / 'diffgraph-v2.schema.json'}{build.os.pathsep}diffgraph/schema"
+    ]
+
+
+def test_release_build_bundles_every_runtime_resource():
+    """Every importlib.resources path the CLI reads must be bundled, or the
+    native binary fails at runtime (cli-v1.3.0 could not load its schema)."""
+    from diffgraph import contract
+
+    bundled = {path.relative_to(build.ROOT / "diffgraph").as_posix() for path in build.PACKAGED_DATA_FILES}
+    assert contract._SCHEMA_RESOURCE in bundled
+
+
+def test_release_build_refuses_data_outside_the_package(tmp_path, monkeypatch):
+    monkeypatch.setattr(build, "PACKAGED_DATA_FILES", (build.ROOT / "README.md",))
+    with pytest.raises(SystemExit, match="missing or outside the package"):
+        build.packaged_data_arguments()
 
 
 def test_release_build_rejects_local_dotenv(tmp_path):
@@ -68,3 +87,26 @@ def test_native_binary_reports_version(tmp_path: Path) -> None:
     binary = output_dir / ("wild.exe" if sys.platform == "win32" else "wild")
     result = subprocess.run([str(binary), "--version"], check=True, capture_output=True, text=True)
     assert result.stdout.strip() == f"wild, version {__version__}"
+    # A real diff exercises the bundled runtime data (the schema).
+    smoke = subprocess.run(
+        [sys.executable, "scripts/release_smoke.py", str(binary)],
+        cwd=build.ROOT, capture_output=True, text=True,
+    )
+    assert smoke.returncode == 0, smoke.stdout + smoke.stderr
+    assert "json: schema 2." in smoke.stdout
+
+
+
+def test_release_smoke_script_checks_a_real_diff():
+    """The release smoke test passes on a working CLI (the dev install)."""
+    import shutil
+
+    wild = shutil.which("wild")
+    if wild is None:
+        pytest.skip("the wild console script is not installed")
+    smoke = subprocess.run(
+        [sys.executable, "scripts/release_smoke.py", wild],
+        cwd=build.ROOT, capture_output=True, text=True,
+    )
+    assert smoke.returncode == 0, smoke.stdout + smoke.stderr
+    assert "json: schema 2." in smoke.stdout and "html:" in smoke.stdout
