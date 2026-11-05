@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-05
+
+### Fixed
+- Native release binaries can run `wild diff` again. The cli-v1.3.0 binaries
+  were built without the packaged DiffGraph schema, so every canonical diff
+  (terminal, HTML, JSON) failed with "could not load canonical DiffGraph
+  schema". The build now bundles an explicit allowlist of runtime package
+  data (only the schema); `.env` files are still refused.
+- Release smoke tests run a real diff (JSON, HTML, terminal) on every
+  platform instead of `--help`, which could not catch missing runtime data.
+
 ## [1.3.0] - 2026-10-26
 
 ### Added
