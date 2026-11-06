@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Build a native, single-file ``wild`` executable with PyInstaller.
 
-This builder deliberately never supplies PyInstaller with ``--add-data``. In
-particular, a local ``.env`` is rejected before the build starts so credentials
-cannot accidentally become part of a release executable.
+The only data bundled is ``PACKAGED_DATA_FILES``: an explicit allowlist of
+exact package files the CLI loads at runtime (the DiffGraph schema every
+canonical artifact is validated against). Nothing else is ever passed to
+PyInstaller as data, and a local ``.env`` is rejected before the build starts
+so credentials cannot become part of a release executable.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -18,6 +21,11 @@ from typing import Sequence
 ROOT = Path(__file__).resolve().parent
 ENTRYPOINT = ROOT / "diffgraph" / "cli.py"
 FORBIDDEN_BUNDLE_FILE_NAMES = frozenset({".env"})
+# Runtime data loaded through importlib.resources. A missing entry here breaks
+# every `wild diff` in the native binary (cli-v1.3.0 shipped without it).
+PACKAGED_DATA_FILES = (
+    ROOT / "diffgraph" / "schema" / "diffgraph-v2.schema.json",
+)
 
 
 def find_forbidden_files(root: Path) -> list[Path]:
@@ -44,8 +52,23 @@ def assert_release_workspace_safe(root: Path) -> None:
         )
 
 
+def packaged_data_arguments() -> list[str]:
+    """``--add-data`` arguments for exactly the allowlisted package files."""
+    arguments: list[str] = []
+    package_root = (ROOT / "diffgraph").resolve()
+    for listed in PACKAGED_DATA_FILES:
+        # Resolve symlinks first: a link inside the package must not pull an
+        # outside file into the release binary.
+        path = listed.resolve()
+        if not path.is_file() or package_root not in path.parents:
+            raise SystemExit(f"packaged data file is missing or outside the package: {listed}")
+        destination = path.parent.relative_to(ROOT.resolve()).as_posix()
+        arguments += ["--add-data", f"{path}{os.pathsep}{destination}"]
+    return arguments
+
+
 def build_command(*, output_dir: Path, work_dir: Path, spec_dir: Path, name: str) -> list[str]:
-    """Return the intentionally data-free native PyInstaller invocation."""
+    """Return the native PyInstaller invocation; data is only the allowlist."""
     return [
         sys.executable,
         "-m",
@@ -62,6 +85,7 @@ def build_command(*, output_dir: Path, work_dir: Path, spec_dir: Path, name: str
         str(work_dir),
         "--specpath",
         str(spec_dir),
+        *packaged_data_arguments(),
         str(ENTRYPOINT),
     ]
 

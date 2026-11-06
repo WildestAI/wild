@@ -122,7 +122,38 @@ class _RawArgsCommand(click.Command):
 
     def parse_args(self, ctx, args):
         ctx.meta["raw_args"] = tuple(args)
-        return super().parse_args(ctx, args)
+        command_index = self._command_index(ctx, args)
+        if command_index is None or args[command_index] == "diff":
+            return super().parse_args(ctx, args)
+        # Every other command belongs to git verbatim: `wild log --format=%h`
+        # or `wild format-patch -o dir` must not be parsed as wild's options.
+        remaining = super().parse_args(ctx, list(args[:command_index]))
+        ctx.params["args"] = tuple(args[command_index:])
+        return remaining
+
+    def _command_index(self, ctx, args):
+        """Index of the first argument after wild's own leading options."""
+        takes_value = set()
+        known = set(self.get_help_option_names(ctx))
+        for param in self.params:
+            if isinstance(param, click.Option):
+                names = [*param.opts, *param.secondary_opts]
+                known.update(names)
+                if not param.is_flag and not param.count:
+                    takes_value.update(names)
+        index = 0
+        while index < len(args):
+            argument = args[index]
+            if argument == "--":
+                return None
+            name = argument.split("=", 1)[0]
+            if argument.startswith("-") and name in known:
+                index += 2 if name in takes_value and "=" not in argument else 1
+                continue
+            # The command, or a git global option such as `-C DIR`, `-c k=v`,
+            # or `--no-pager`: everything from here belongs to git.
+            return index
+        return None
 
 
 def _terminal_options(
