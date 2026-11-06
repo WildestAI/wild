@@ -101,16 +101,39 @@ def test_native_binary_reports_version(tmp_path: Path) -> None:
 
 
 
-def test_release_scenario_suite_passes_on_the_installed_cli():
-    """The release scenario suite (VS Code extension commands, core CLI forms, exit codes, git passthrough) passes on the dev install."""
-    import shutil
-
-    wild = shutil.which("wild")
-    if wild is None:
-        pytest.skip("the wild console script is not installed")
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX launcher script")
+def test_release_scenario_suite_passes_on_this_checkout(tmp_path):
+    """The release scenario suite (VS Code extension commands, core CLI
+    forms, exit codes, git passthrough) passes on this checkout's CLI."""
+    # A launcher for this checkout, never whichever `wild` is first on PATH.
+    launcher = tmp_path / "wild"
+    launcher.write_text(
+        f"#!{sys.executable}\n"
+        "import sys\n"
+        f"sys.path.insert(0, {str(build.ROOT)!r})\n"
+        "from diffgraph.cli import main\n"
+        "main(prog_name='wild')\n",
+        encoding="utf-8",
+    )
+    launcher.chmod(0o755)
     smoke = subprocess.run(
-        [sys.executable, "scripts/release_smoke.py", wild],
+        [sys.executable, "scripts/release_smoke.py", str(launcher)],
         cwd=build.ROOT, capture_output=True, text=True,
     )
     assert smoke.returncode == 0, smoke.stdout + smoke.stderr
     assert "schema-validated" in smoke.stdout and "scenarios passed" in smoke.stdout
+
+
+
+def test_release_build_resolves_symlinks_before_the_package_check(tmp_path, monkeypatch):
+    outside = tmp_path / "secret.json"
+    outside.write_text("{}", encoding="utf-8")
+    schema_dir = tmp_path / "diffgraph" / "schema"
+    schema_dir.mkdir(parents=True)
+    link = schema_dir / "diffgraph-v2.schema.json"
+    link.symlink_to(outside)
+    monkeypatch.setattr(build, "ROOT", tmp_path)
+    monkeypatch.setattr(build, "PACKAGED_DATA_FILES", (link,))
+
+    with pytest.raises(SystemExit, match="missing or outside the package"):
+        build.packaged_data_arguments()

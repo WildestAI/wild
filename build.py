@@ -55,11 +55,14 @@ def assert_release_workspace_safe(root: Path) -> None:
 def packaged_data_arguments() -> list[str]:
     """``--add-data`` arguments for exactly the allowlisted package files."""
     arguments: list[str] = []
-    package_root = ROOT / "diffgraph"
-    for path in PACKAGED_DATA_FILES:
+    package_root = (ROOT / "diffgraph").resolve()
+    for listed in PACKAGED_DATA_FILES:
+        # Resolve symlinks first: a link inside the package must not pull an
+        # outside file into the release binary.
+        path = listed.resolve()
         if not path.is_file() or package_root not in path.parents:
-            raise SystemExit(f"packaged data file is missing or outside the package: {path}")
-        destination = path.parent.relative_to(ROOT).as_posix()
+            raise SystemExit(f"packaged data file is missing or outside the package: {listed}")
+        destination = path.parent.relative_to(ROOT.resolve()).as_posix()
         arguments += ["--add-data", f"{path}{os.pathsep}{destination}"]
     return arguments
 

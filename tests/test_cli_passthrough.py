@@ -50,3 +50,19 @@ def test_wild_options_before_the_command_are_still_wild_options(git_calls):
 def test_version_and_help_are_unaffected():
     assert CliRunner().invoke(cli.main, ["--version"]).exit_code == 0
     assert "Usage" in CliRunner().invoke(cli.main, ["--help"]).output
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["-C", "/repo", "log", "--format=%h"],
+        ["-c", "core.pager=cat", "log", "-o", "x"],
+        ["--no-pager", "show", "--format=%s"],
+        ["-C", "/repo", "diff", "--stat"],
+    ],
+)
+def test_git_global_options_start_a_verbatim_passthrough(argv, git_calls):
+    result = CliRunner().invoke(cli.main, argv)
+
+    assert result.exit_code == 0, result.output
+    assert git_calls == [["git", *argv]]

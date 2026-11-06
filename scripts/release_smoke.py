@@ -51,8 +51,11 @@ class Workspace:
         self.executable = executable
         home = root / "home"
         home.mkdir()
+        # Git variables inherited from a hook (GIT_DIR, GIT_WORK_TREE,
+        # GIT_INDEX_FILE, ...) would point every command at another repository.
+        inherited = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
         self.env = {
-            **os.environ,
+            **inherited,
             # No user config, relay token, or .env can influence the run.
             "HOME": str(home),
             "USERPROFILE": str(home),
