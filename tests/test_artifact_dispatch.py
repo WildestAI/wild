@@ -198,7 +198,8 @@ def test_format_json_explicit_output_is_atomic_and_reports_on_stderr(tmp_path, m
         (["--structural-json", "legacy.json", "--format", "json", "diff"], "cannot be combined"),
         (["--structural-json", "legacy.json", "--output", "other.json", "diff"], "cannot be combined"),
         (["diff", "--format", "terminal", "--output", "terminal.txt"], "writes to stdout"),
-        (["status", "--format", "json"], "can only be used with 'diff'"),
+        # wild options apply before the command; after it they belong to git.
+        (["--format", "json", "status"], "can only be used with 'diff'"),
     ],
 )
 def test_canonical_option_conflicts_are_usage_errors(arguments, message):
